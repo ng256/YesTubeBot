@@ -40,13 +40,7 @@ internal class YouTubeVideoCollection : IEnumerable<YouTubeVideo>, IEnumerable
     /// <exception cref="ArgumentException">Thrown when index is out of range</exception>
     public YouTubeVideo this[int n] => Get(n);
 
-    /// <summary>
-    /// Determines if the specified index is valid for the collection
-    /// </summary>
-    /// <param name="n">The index to validate</param>
-    /// <returns>
-    /// <c>true</c> if the index is within the valid range; <c>false</c> otherwise
-    /// </returns>
+    // Determines if the specified index is valid for the collection
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool ValidIndex(int n) => n >= 0 && n < _collection.Length;
 
