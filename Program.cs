@@ -33,7 +33,7 @@ using File = System.IO.File;
 internal class Program
 {
 
-    private static readonly TelegramBotClient BotClient = CreateBotClient("7408864209:AAEepcFxjK-8nx1IfL2bO5b_3sqlJoV6lNo", "http://127.0.0.1:8080/");
+    private static readonly TelegramBotClient BotClient = CreateBotClient("BOT_API_TOKEN", "http://127.0.0.1:8080/");
     private static readonly ConcurrentDictionary<long, UserSession> UserSelections = new();
     private static readonly string AppFolderPath = PathInfo.GetFolderPath(WorkFolder.Application);
     private static readonly string LogoPath = Path.Combine(AppFolderPath, "logo.txt");
