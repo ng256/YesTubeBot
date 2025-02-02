@@ -1,0 +1,180 @@
+    public static async Task<string> DownloadAsync(this YouTubeVideo video, 
+        bool addFormat = false, 
+        bool tempFile = false,
+        IProgress<long> progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        WorkFolder workFolder = tempFile ? WorkFolder.Temp : WorkFolder.Downloads;
+        string folderPath = PathInfo.GetFolderPath(workFolder);
+        string fileName = GetFileName(video, addFormat);
+        string filePath = Path.Combine(folderPath, fileName);
+
+        await DownloadAsync(video, filePath, progress, cancellationToken);
+
+        return filePath;
+    }
+
+    public static async Task<string> DownloadAsync(this YouTubeVideo video, 
+        bool addFormat = false, 
+        bool tempFile = false)
+    {
+        if (video == null)
+            throw new ArgumentNullException(nameof(video), "The video cannot be null.");
+
+        WorkFolder workFolder = tempFile ? WorkFolder.Temp : WorkFolder.Downloads;
+        string folderPath = PathInfo.GetFolderPath(workFolder);
+        string fileName = GetFileName(video, addFormat);
+        string filePath = Path.Combine(folderPath, fileName);
+
+        await DownloadAsync(video, filePath);
+
+        return filePath;
+    }
+
+    public static async Task DownloadAsync(this YouTubeVideo video, string filePath)
+    {
+        if (video == null) 
+            throw new ArgumentNullException(nameof(video), "The video cannot be null.");
+        if (string.IsNullOrWhiteSpace(filePath)) 
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        byte[] bytes = await video.GetBytesAsync() ?? throw new InvalidOperationException("Video downloading failed.");
+        await File.WriteAllBytesAsync(filePath, bytes).ConfigureAwait(false);
+    }
+
+    public static async Task DownloadAsync(
+        this YouTubeVideo video,
+        string filePath,
+        IProgress<long> progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (video == null)
+            throw new ArgumentNullException(nameof(video), "The video cannot be null.");
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        HttpMessageHandler handler = GetHandler();
+
+        using HttpClient httpClient = new HttpClient(handler);
+        using HttpResponseMessage response = await httpClient.GetAsync(video.Uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        long? contentLength = response.Content.Headers.ContentLength;
+        if (contentLength == null)
+            throw new InvalidOperationException("Unable to determine content length.");
+
+        await using FileStream fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
+        await using Stream contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+
+        byte[] buffer = new byte[8192];
+        long totalBytesRead = 0;
+        int bytesRead;
+
+        while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
+        {
+            await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+
+            totalBytesRead += bytesRead;
+            if (progress != null && contentLength.HasValue)
+            {
+                long percent = totalBytesRead * 100 / contentLength.Value;
+                progress.Report(percent);
+            }
+        }
+    }
+
+    public static async Task<byte[]> GetPreviewBytesAsync(this YouTubeVideo video)
+    {
+        if (video == null)
+            throw new ArgumentNullException(nameof(video), "The video cannot be null.");
+
+        string videoId = ExtractVideoId(video);
+        if (string.IsNullOrEmpty(videoId))
+            throw new InvalidOperationException("Unable to extract video ID from the URI.");
+
+        string thumbnailUrl = $"https://img.youtube.com/vi/{videoId}/hqdefault.jpg";
+
+        HttpMessageHandler handler = GetHandler();
+        
+        using HttpClient httpClient = new HttpClient(handler);
+        using HttpResponseMessage response = await httpClient.GetAsync(thumbnailUrl, HttpCompletionOption.ResponseHeadersRead);
+
+        response.EnsureSuccessStatusCode();
+
+        long? contentLength = response.Content.Headers.ContentLength;
+        if (contentLength == null)
+            throw new InvalidOperationException("Unable to determine content length.");
+
+        await using MemoryStream memoryStream = new MemoryStream();
+        await using Stream contentStream = await response.Content.ReadAsStreamAsync();
+
+        byte[] buffer = new byte[8192];
+        long totalBytesRead = 0;
+        int bytesRead;
+
+        while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+        {
+            await memoryStream.WriteAsync(buffer.AsMemory(0, bytesRead));
+
+            totalBytesRead += bytesRead;
+        }
+
+        return memoryStream.ToArray();
+    }
+
+
+
+    public static async Task DownloadPreviewAsync(this YouTubeVideo video, string filePath,
+        IProgress<long> progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (video == null)
+            throw new ArgumentNullException(nameof(video), "The video cannot be null.");
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        string videoId = ExtractVideoId(video);
+        if (string.IsNullOrEmpty(videoId))
+            throw new InvalidOperationException("Unable to extract video ID from the URI.");
+
+        string thumbnailUrl = $"https://img.youtube.com/vi/{videoId}/maxresdefault.jpg";
+
+        HttpClientHandler handler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+        };
+
+
+        using HttpClient httpClient = new HttpClient(handler);
+        using HttpResponseMessage response = await httpClient.GetAsync(thumbnailUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        long? contentLength = response.Content.Headers.ContentLength;
+        if (contentLength == null)
+            throw new InvalidOperationException("Unable to determine content length.");
+
+        await using FileStream fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
+        await using Stream contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+
+        byte[] buffer = new byte[8192];
+        long totalBytesRead = 0;
+        int bytesRead;
+
+        while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
+        {
+            await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+
+            totalBytesRead += bytesRead;
+            if (progress != null && contentLength.HasValue)
+            {
+                long percent = totalBytesRead * 100 / contentLength.Value;
+                progress.Report(percent);
+            }
+        }
+
+        /*filePath = PathInfo.GetValidPath(filePath);
+        byte[] bytes = await GetPreviewBytesAsync(video) ?? throw new InvalidOperationException("Video downloading failed.");
+        await File.WriteAllBytesAsync(filePath, bytes).ConfigureAwait(false);*/
+    }
